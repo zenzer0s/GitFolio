@@ -1,79 +1,39 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
-const cron = require('node-cron');
 const axios = require('axios');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+const SERVER_URL = process.env.SERVER_URL;
 
-// Store user chat IDs for scheduled messages
-let users = new Set();
+const users = new Map(); // Stores user sessions
 
-// Handle "/start" command
+// 🛠 Handle "/start"
 bot.onText(/\/start/, (msg) => {
+    bot.sendMessage(msg.chat.id, "🚀 Welcome to GitFolio Bot!\n\nUse /login to authenticate with GitHub.");
+});
+
+// 🔑 Handle "/login"
+bot.onText(/\/login/, (msg) => {
     const chatId = msg.chat.id;
-    users.add(chatId);
+    const loginUrl = `${SERVER_URL}/auth/github`;
     
-    bot.sendMessage(chatId, "🚀 Welcome to GitFolio Bot!\n\nGet daily GitHub stats in Telegram!", {
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: "📅 Today’s Stats", callback_data: "stats_today" }],
-                [{ text: "📆 Weekly Stats", callback_data: "stats_week" }],
-                [{ text: "📊 Monthly Stats", callback_data: "stats_month" }],
-                [{ text: "🏆 All-time Stats", callback_data: "stats_all" }]
-            ]
-        }
-    });
+    bot.sendMessage(chatId, "🔗 Click the link below to login with GitHub:\n\n" + loginUrl);
 });
 
-// Function to fetch GitHub stats
-async function fetchGitHubStats() {
+// 📊 Fetch Stats
+bot.onText(/\/stats/, async (msg) => {
+    const chatId = msg.chat.id;
+
     try {
-        const response = await axios.get('http://localhost:3000/github/contributions');
-        return response.data;
+        const response = await axios.get(`${SERVER_URL}/github/stats`, { withCredentials: true });
+
+        bot.sendMessage(chatId, `📊 *GitHub Stats:*\n👤 Name: ${response.data.name}\n📁 Repos: ${response.data.total_repos}\n👥 Followers: ${response.data.followers}\n🔄 Following: ${response.data.following}`, {
+            parse_mode: "Markdown"
+        });
+
     } catch (error) {
-        console.error("❌ Error fetching GitHub stats:", error);
-        return { error: "Failed to fetch GitHub stats" };
-    }
-}
-
-// Handle inline button clicks
-bot.on("callback_query", async (query) => {
-    const chatId = query.message.chat.id;
-    const data = query.data;
-    
-    const stats = await fetchGitHubStats();
-
-    let message = "❌ Failed to fetch stats.";
-    if (!stats.error) {
-        if (data === "stats_today") {
-            message = `📅 *Today's Contributions:* ${stats.today}`;
-        } else if (data === "stats_week") {
-            message = `📆 *This Week:* ${stats.week}`;
-        } else if (data === "stats_month") {
-            message = `📊 *This Month:* ${stats.month}`;
-        } else if (data === "stats_all") {
-            message = `🏆 *All-time Contributions:* ${stats.totalContributions}`;
-        }
-    }
-    
-    bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-});
-
-// Schedule messages at 8 AM & 10 PM
-cron.schedule("0 8 * * *", async () => {
-    console.log("📨 Sending 8 AM updates...");
-    for (const chatId of users) {
-        const stats = await fetchGitHubStats();
-        bot.sendMessage(chatId, `☀️ *Good Morning!*\n📅 Today's Contributions: ${stats.today || "N/A"}`, { parse_mode: "Markdown" });
+        bot.sendMessage(chatId, "❌ Error: Please login first using /login.");
     }
 });
 
-cron.schedule("0 22 * * *", async () => {
-    console.log("📨 Sending night updates...");
-    for (const chatId of users) {
-        const stats = await fetchGitHubStats();
-        bot.sendMessage(chatId, `🌙 *Good Night!*\n📅 Today's Contributions: ${stats.today || "N/A"}`, { parse_mode: "Markdown" });
-    }
-});
-
-console.log("🤖 Telegram bot is running...");
+console.log("🤖 Telegram Bot is running...");

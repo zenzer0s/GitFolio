@@ -8,9 +8,10 @@ const axios = require("axios");
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET,
+    secret: 'gitfolio_secret', // Change this to a secure secret
     resave: false,
     saveUninitialized: true,
   })
@@ -44,65 +45,67 @@ passport.deserializeUser((obj, done) => {
   done(null, obj);
 });
 
-// Routes
-app.get("/auth/github", passport.authenticate("github", { scope: ["read:user"] }));
+// Redirect user to GitHub OAuth
+app.get('/auth/github', (req, res) => {
+  const redirectUri = `${process.env.SERVER_URL}/auth/github/callback`;
+  res.redirect(`https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${redirectUri}&scope=repo,user`);
+});
 
-app.get(
-  "/auth/github/callback",
-  async (req, res) => {
-    const { code } = req.query;
-
-    try {
-      const tokenResponse = await axios.post(
-        "https://github.com/login/oauth/access_token",
-        {
-          client_id: process.env.GITHUB_CLIENT_ID,
-          client_secret: process.env.GITHUB_CLIENT_SECRET,
-          code,
-        },
-        { headers: { Accept: "application/json" } }
-      );
-
-      const accessToken = tokenResponse.data.access_token;
-      if (!accessToken) {
-        console.log("⚠️ No Access Token Received");
-        return res.status(400).json({ error: "Failed to get access token" });
-      }
-
-      req.session.accessToken = accessToken; // ✅ Store in session
-      req.session.save(() => {  // 🔥 Force save session
-        console.log("✅ GitHub Access Token Stored:", accessToken);
-        res.redirect("/dashboard"); // Redirect after login
-      });
-
-    } catch (error) {
-      console.error("❌ GitHub OAuth Error:", error);
-      res.status(500).send("Authentication failed");
-    }
-  }
-);
-
-app.get("/github/stats", async (req, res) => {
+// GitHub OAuth callback
+app.get('/auth/github/callback', async (req, res) => {
+  const { code } = req.query;
   try {
-    const username = "zenzer0s"; // Replace with logged-in user's GitHub username
-    const response = await axios.get(`https://api.github.com/users/${username}`);
+    const tokenRes = await axios.post('https://github.com/login/oauth/access_token', {
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      code
+    }, { headers: { Accept: 'application/json' } });
+
+    req.session.githubToken = tokenRes.data.access_token;
+
+    const userRes = await axios.get('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${req.session.githubToken}` }
+    });
+
+    req.session.githubUser = userRes.data.login;
+    res.send("<h2>✅ Login Successful! You can now use the Telegram Bot.</h2><script>setTimeout(()=>window.close(),3000);</script>");
+
+  } catch (error) {
+    console.error("❌ GitHub OAuth Error:", error);
+    res.status(500).send("GitHub login failed.");
+  }
+});
+
+// Fetch GitHub Stats
+app.get('/github/stats', async (req, res) => {
+  if (!req.session.githubToken) {
+    return res.status(401).json({ error: "User not authenticated" });
+  }
+
+  try {
+    const username = req.session.githubUser;
+    const response = await axios.get(`https://api.github.com/users/${username}`, {
+      headers: { Authorization: `Bearer ${req.session.githubToken}` }
+    });
 
     res.json({
       name: response.data.name,
       total_repos: response.data.public_repos,
       followers: response.data.followers,
-      following: response.data.following,
-      contributions: "🚧 Coming soon!",
+      following: response.data.following
     });
+
   } catch (error) {
+    console.error("❌ Failed to fetch GitHub stats:", error);
     res.status(500).json({ error: "Failed to fetch GitHub stats" });
   }
 });
 
+// Fetch GitHub Contributions
 app.get("/github/contributions", async (req, res) => {
   console.log("🔍 Checking Session Data:", req.session); // Debugging
 
-  if (!req.session.accessToken) {
+  if (!req.session.githubToken) {
     console.log("⚠️ User Not Authenticated");
     return res.status(401).json({ error: "User not authenticated" });
   }
@@ -123,7 +126,7 @@ app.get("/github/contributions", async (req, res) => {
     const response = await axios.post(
       "https://api.github.com/graphql",
       { query },
-      { headers: { Authorization: `Bearer ${req.session.accessToken}` } }
+      { headers: { Authorization: `Bearer ${req.session.githubToken}` } }
     );
 
     const totalContributions =

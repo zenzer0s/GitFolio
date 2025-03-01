@@ -42,37 +42,63 @@ jobs:
             echo "service_status=unknown" >> $GITHUB_OUTPUT
           fi
       
-      - name: Handle Service Deployment
+      - name: Terminate Any Running Instances
         run: |
           SERVICE_STATUS="${{ steps.check-status.outputs.service_status }}"
+          echo "Current service status: $SERVICE_STATUS"
           
-          if [ "$SERVICE_STATUS" = "RUNNING" ]; then
-            echo "Service is running. Redeploying..."
-            curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/redeploy" \
-            -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
+          # First attempt to stop the service regardless of current state
+          echo "Attempting to stop any running instances..."
+          curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/pause" \
+          -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
           
-          elif [ "$SERVICE_STATUS" = "PAUSED" ]; then
-            echo "Service is paused. Resuming..."
-            curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/resume" \
+          echo "Waiting for service to stop..."
+          sleep 45
+          
+          # Double check if it's still running and force restart if needed
+          CHECK_RESPONSE=$(curl -s -X GET "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}" \
+          -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}")
+          
+          CHECK_STATUS=$(echo $CHECK_RESPONSE | jq -r '.service.status')
+          echo "Service status after pause attempt: $CHECK_STATUS"
+          
+          if [ "$CHECK_STATUS" = "RUNNING" ]; then
+            echo "Service is still running. Forcing restart..."
+            curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/restart" \
             -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
             
-            echo "Waiting for service to start..."
+            echo "Waiting for restart to complete..."
             sleep 60
-            
-            echo "Redeploying..."
-            curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/redeploy" \
-            -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
+          fi
+      
+      - name: Resume and Deploy Service
+        run: |
+          # Resume the service to prepare for deployment
+          echo "Resuming service..."
+          curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/resume" \
+          -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
           
-          else
-            echo "Service is in state: $SERVICE_STATUS. Attempting to resume and redeploy..."
-            # Try to resume in case it's paused but not reporting correctly
+          echo "Waiting for service to start..."
+          sleep 60
+          
+          echo "Redeploying with latest changes..."
+          curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/redeploy" \
+          -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
+      
+      - name: Verify Deployment
+        run: |
+          echo "Waiting for deployment to finalize..."
+          sleep 45
+          
+          FINAL_CHECK=$(curl -s -X GET "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}" \
+          -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}")
+          
+          FINAL_STATUS=$(echo $FINAL_CHECK | jq -r '.service.status')
+          echo "Final service status: $FINAL_STATUS"
+          
+          if [ "$FINAL_STATUS" != "RUNNING" ]; then
+            echo "Warning: Service is not in RUNNING state after deployment. Current state: $FINAL_STATUS"
+            echo "Attempting final resume..."
             curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/resume" \
-            -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
-            
-            echo "Waiting for service to stabilize..."
-            sleep 60
-            
-            echo "Redeploying..."
-            curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/redeploy" \
             -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
           fi

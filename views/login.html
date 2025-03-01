@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GitFolio - GitHub Authentication</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #0d1117;
+      color: #c9d1d9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+    
+    .container {
+      max-width: 500px;
+      padding: 30px;
+      background-color: #161b22;
+      border-radius: 6px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      color: #58a6ff;
+      margin-bottom: 20px;
+    }
+    
+    .success-icon {
+      color: #238636;
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+    
+    .error-icon {
+      color: #f85149;
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+    
+    .message {
+      margin-bottom: 30px;
+      line-height: 1.5;
+    }
+    
+    .button {
+      background-color: #238636;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .button:hover {
+      background-color: #2ea043;
+    }
+    
+    .error-button {
+      background-color: #f85149;
+    }
+    
+    .error-button:hover {
+      background-color: #ff6b64;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="container">
+    <div id="icon-container"></div>
+    <h1 id="title"></h1>
+    <div class="message" id="message"></div>
+    <button class="button" id="button" onclick="window.close()">Close Window</button>
+  </div>
+
+  <script>
+    // Dynamically update page based on status from URL parameter
+    window.onload = function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const status = urlParams.get('status');
+      const iconContainer = document.getElementById('icon-container');
+      const title = document.getElementById('title');
+      const message = document.getElementById('message');
+      const button = document.getElementById('button');
+      
+      if (status === 'success') {
+        iconContainer.innerHTML = '<div class="success-icon">✅</div>';
+        title.textContent = 'GitHub Authentication Successful!';
+        message.textContent = 'Your GitHub account has been successfully connected to the GitFolio Bot. You can now use commands like /stats and /repositories in Telegram.';
+        
+        // Auto-close after 5 seconds
+        setTimeout(() => {
+          window.close();
+        }, 5000);
+      } else {
+        iconContainer.innerHTML = '<div class="error-icon">❌</div>';
+        title.textContent = 'GitHub Authentication Failed';
+        message.textContent = 'We couldn\'t connect your GitHub account. Please try again or contact support if the problem persists.';
+        button.textContent = 'Try Again';
+        button.classList.add('error-button');
+        button.onclick = function() {
+          window.location.href = '/auth/github';
+        };
+      }
+    };
+  </script>
+</body>
+</html>

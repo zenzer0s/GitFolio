@@ -1,6 +1,7 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const querystring = require('querystring');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const SERVER_URL = process.env.SERVER_URL;
@@ -16,7 +17,10 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/login/, (msg) => {
     const chatId = msg.chat.id;
     const loginUrl = `${SERVER_URL}/auth/github`;
-    
+
+    // Store the chat ID in the users map
+    users.set(chatId, msg.from.id);
+
     bot.sendMessage(chatId, "🔗 Click the link below to login with GitHub:\n\n" + loginUrl);
 });
 
@@ -25,7 +29,12 @@ bot.onText(/\/stats/, async (msg) => {
     const chatId = msg.chat.id;
 
     try {
-        const response = await axios.get(`${SERVER_URL}/github/stats`, { withCredentials: true });
+        const response = await axios.get(`${SERVER_URL}/github/stats`, {
+            headers: {
+                Cookie: `connect.sid=${querystring.escape(users.get(chatId))}`
+            },
+            withCredentials: true
+        });
 
         bot.sendMessage(chatId, `📊 *GitHub Stats:*\n👤 Name: ${response.data.name}\n📁 Repos: ${response.data.total_repos}\n👥 Followers: ${response.data.followers}\n🔄 Following: ${response.data.following}`, {
             parse_mode: "Markdown"

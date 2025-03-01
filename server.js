@@ -13,7 +13,8 @@ app.use(
   session({
     secret: 'gitfolio_secret', // Change this to a secure secret
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,  // Set to false so session isn't created without data
+    cookie: { secure: false }  // Set to true in production if using HTTPS
   })
 );
 app.use(passport.initialize());
@@ -61,13 +62,18 @@ app.get('/auth/github/callback', async (req, res) => {
       code
     }, { headers: { Accept: 'application/json' } });
 
-    req.session.githubToken = tokenRes.data.access_token;
+    const accessToken = tokenRes.data.access_token;
+    req.session.githubToken = accessToken;
 
     const userRes = await axios.get('https://api.github.com/user', {
-      headers: { Authorization: `Bearer ${req.session.githubToken}` }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
 
     req.session.githubUser = userRes.data.login;
+    req.session.save();  // Explicitly save session!
+
+    console.log("✅ GitHub Login Successful!", req.session);
+
     res.send("<h2>✅ Login Successful! You can now use the Telegram Bot.</h2><script>setTimeout(()=>window.close(),3000);</script>");
 
   } catch (error) {
@@ -139,6 +145,13 @@ app.get("/github/contributions", async (req, res) => {
   }
 });
 
+// Debug session data
+app.get('/debug/session', (req, res) => {
+  console.log("SESSION DATA:", req.session);
+  res.json(req.session);
+});
+
+console.log("🚀 Server running at http://localhost:3000");
 app.listen(3000, () => {
   console.log("🚀 Server running at http://localhost:3000");
 });

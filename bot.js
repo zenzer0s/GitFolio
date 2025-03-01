@@ -272,4 +272,4 @@ class GitFolioBot {
 
 // Create and export bot instance
 const gitFolioBot = new GitFolioBot();
-//module.exports = gitFolioBot;
+module.exports = gitFolioBot;

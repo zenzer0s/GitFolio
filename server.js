@@ -18,6 +18,11 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.use((req, res, next) => {
+  console.log("SESSION DATA:", req.session);
+  next();
+});
+
 passport.use(
   new GitHubStrategy(
     {
@@ -26,7 +31,7 @@ passport.use(
       callbackURL: "http://localhost:3000/auth/github/callback",
     },
     function (accessToken, refreshToken, profile, done) {
-      return done(null, profile);
+      return done(null, { profile, accessToken });
     }
   )
 );
@@ -44,9 +49,36 @@ app.get("/auth/github", passport.authenticate("github", { scope: ["read:user"] }
 
 app.get(
   "/auth/github/callback",
-  passport.authenticate("github", { failureRedirect: "/login" }),
-  (req, res) => {
-    res.send("✅ GitHub Login Successful! You can close this tab.");
+  async (req, res) => {
+    const { code } = req.query;
+
+    try {
+      const tokenResponse = await axios.post(
+        "https://github.com/login/oauth/access_token",
+        {
+          client_id: process.env.GITHUB_CLIENT_ID,
+          client_secret: process.env.GITHUB_CLIENT_SECRET,
+          code,
+        },
+        { headers: { Accept: "application/json" } }
+      );
+
+      const accessToken = tokenResponse.data.access_token;
+      if (!accessToken) {
+        console.log("⚠️ No Access Token Received");
+        return res.status(400).json({ error: "Failed to get access token" });
+      }
+
+      req.session.accessToken = accessToken; // ✅ Store in session
+      req.session.save(() => {  // 🔥 Force save session
+        console.log("✅ GitHub Access Token Stored:", accessToken);
+        res.redirect("/dashboard"); // Redirect after login
+      });
+
+    } catch (error) {
+      console.error("❌ GitHub OAuth Error:", error);
+      res.status(500).send("Authentication failed");
+    }
   }
 );
 
@@ -64,6 +96,43 @@ app.get("/github/stats", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch GitHub stats" });
+  }
+});
+
+app.get("/github/contributions", async (req, res) => {
+  console.log("🔍 Checking Session Data:", req.session); // Debugging
+
+  if (!req.session.accessToken) {
+    console.log("⚠️ User Not Authenticated");
+    return res.status(401).json({ error: "User not authenticated" });
+  }
+
+  try {
+    const query = `
+      query {
+        viewer {
+          contributionsCollection {
+            contributionCalendar {
+              totalContributions
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await axios.post(
+      "https://api.github.com/graphql",
+      { query },
+      { headers: { Authorization: `Bearer ${req.session.accessToken}` } }
+    );
+
+    const totalContributions =
+      response.data.data.viewer.contributionsCollection.contributionCalendar.totalContributions;
+
+    res.json({ totalContributions });
+  } catch (error) {
+    console.error("❌ GitHub API Error:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to fetch contributions" });
   }
 });
 

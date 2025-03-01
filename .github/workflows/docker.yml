@@ -24,19 +24,6 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/gitfolio:latest
       
-      - name: Stop Previous Deployment (Pause Service)
-        run: |
-          curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/pause" \
-          -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
-      
-      - name: Wait for Service to Stop
-        run: sleep 60
-      
-      - name: Resume Service
-        run: |
-          curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/resume" \
-          -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
-      
       - name: Deploy to Koyeb
         run: |
           curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/redeploy" \

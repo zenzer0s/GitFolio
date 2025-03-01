@@ -6,8 +6,8 @@ module.exports = {
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   
   // Server config
-  SERVER_URL: process.env.SERVER_URL || 'http://localhost:3000',
-  PORT: process.env.PORT || 3000,
+  SERVER_URL: process.env.SERVER_URL || 'http://localhost:8000',
+  PORT: process.env.PORT || 8000,
   
   // GitHub OAuth config
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,

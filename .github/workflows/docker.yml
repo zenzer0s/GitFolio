@@ -27,9 +27,9 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/gitfolio:latest
 
-      - name: Stop Previous Deployment
+      - name: Stop Previous Deployment (Pause Service)
         run: |
-          curl -X DELETE "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/instances" \
+          curl -X POST "https://app.koyeb.com/v1/services/${{ secrets.KOYEB_SERVICE_ID }}/pause" \
             -H "Authorization: Bearer ${{ secrets.KOYEB_API_TOKEN }}"
 
       - name: Deploy to Koyeb
